@@ -8,6 +8,8 @@ on:
 
 env:
   AWS_REGION: ap-south-1
+  LAMBDA_FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME }}
+  AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
   PYTHON_VERSION: "3.12"
 
 jobs:
@@ -21,6 +23,24 @@ jobs:
       id-token: write # required for AWS OIDC auth
 
     steps:
+      - name: Debug - verify environment values are pulled
+        env:
+          ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          echo "---- Non-secret env vars ----"
+          echo "AWS_REGION            = $AWS_REGION"
+          echo "LAMBDA_FUNCTION_NAME  = $LAMBDA_FUNCTION_NAME"
+          echo "PYTHON_VERSION        = $PYTHON_VERSION"
+          echo "github.ref_name       = ${{ github.ref_name }}"
+          echo "---- Secret presence check (value is masked by GitHub) ----"
+          if [ -z "$ROLE_ARN" ]; then
+            echo "AWS_DEPLOY_ROLE_ARN is NOT set (empty). Check the secret name and environment."
+            exit 1
+          else
+            echo "AWS_DEPLOY_ROLE_ARN is set. Length = ${#ROLE_ARN} chars."
+            echo "Masked echo (should print '***'): $ROLE_ARN"
+          fi
+
       - name: Checkout source
         uses: actions/checkout@v4
 
