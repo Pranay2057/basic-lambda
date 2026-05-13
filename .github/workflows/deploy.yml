@@ -1,0 +1,74 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy to AWS Lambda
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write # required for AWS OIDC auth
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies into build directory
+        run: |
+          mkdir -p build
+          if [ -s requirements.txt ] && grep -v '^\s*#' requirements.txt | grep -q .; then
+            pip install \
+              --platform manylinux2014_x86_64 \
+              --target build \
+              --implementation cp \
+              --python-version ${{ env.PYTHON_VERSION }} \
+              --only-binary=:all: \
+              --upgrade \
+              -r requirements.txt
+          else
+            echo "No runtime dependencies declared in requirements.txt"
+          fi
+
+      - name: Copy source files into build directory
+        run: |
+          cp lambda_function.py build/
+
+      - name: Create deployment package
+        run: |
+          cd build
+          zip -r ../lambda.zip .
+          cd ..
+          ls -lh lambda.zip
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+
+      - name: Update Lambda function code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --zip-file fileb://lambda.zip \
+            --publish
+
+      - name: Wait for update to finish
+        run: |
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION_NAME"

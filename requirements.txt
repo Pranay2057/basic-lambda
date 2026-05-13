@@ -1,0 +1,3 @@
+# Add runtime dependencies for the Lambda function here.
+# Example:
+# requests==2.32.3
